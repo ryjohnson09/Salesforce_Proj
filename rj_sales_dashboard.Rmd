@@ -221,7 +221,7 @@ rj_sunburst_table <- rj_opps_acct %>%
 
 # Get list of ALL calls, past and present
 # Does not include in person meetings
-all_calls_test <- tasks %>% 
+all_calls <- tasks %>% 
   filter(task_subtype == "Call", type == "Call") %>% 
   filter(is_deleted == "0") %>% # This line is weird and could cause problems
   filter(status == "Completed") %>%
@@ -232,16 +232,23 @@ all_calls_test <- tasks %>%
 
 # merge calls into accounts
 calls_account <- rj_acct %>% 
-  left_join(all_calls_test, by = "account_id") %>% 
+  left_join(all_calls, by = "account_id") %>% 
   select(account_name, activity_date) %>% 
   # Calculate days from last call
-  mutate(days_last_call = as.double(difftime(
-    ymd(today),
-    ymd(activity_date),
-    units = "days"))) %>% 
+  mutate(days_last_call = as.double(difftime(ymd(today),
+                                             ymd(activity_date),
+                                             units = "days"))) %>% 
   group_by(account_name) %>% 
   filter(days_last_call == min(days_last_call) | is.na(days_last_call)) %>% 
-  unique()
+  unique() %>% 
+  ungroup() %>% 
+  mutate(account_name_days = paste0(account_name, " -- Days since last call: ", days_last_call))
+
+# Add to sunburst table and change account name
+rj_sunburst_table_call <- rj_sunburst_table %>% 
+  left_join(calls_account, by = "account_name") %>% 
+  select(account_name_days, everything()) %>% 
+  select(-account_name)
 
 # Add colors conditionally
 calls_account_color <- calls_account %>% 
@@ -252,7 +259,7 @@ calls_account_color <- calls_account %>%
   mutate(acct_color = ifelse(is.na(acct_color), "#ca0020", acct_color))
 
 # Color opps by days to close
-opps_color <- rj_sunburst_table %>% 
+opps_color <- rj_sunburst_table_call %>% 
   select(opp_name_days, days_to_close) %>% 
   mutate(opp_color = ifelse(days_to_close <= 0, "#b10026",
                      ifelse(days_to_close > 0 & days_to_close <= 7, "#e31a1c",
@@ -323,17 +330,19 @@ ggplotly(sales_plot)
 ### Company Opp Amounts
 
 ```{r}
-sunburst_tree <- rj_sunburst_table %>% 
-  select(account_name, opp_name_days, opp_amount) %>% 
+sunburst_tree <- rj_sunburst_table_call %>% 
+  select(account_name_days, opp_name_days, opp_amount) %>% 
   d3_nest(value_cols = "opp_amount")
 
 my_colors <- list(range = c(calls_account_color$acct_color, opps_color$opp_color),
-                  domain = c(calls_account_color$account_name, opps_color$opp_name_days))
+                  domain = c(calls_account_color$account_name_days, opps_color$opp_name_days))
 
 sunburst_opps <- sund2b(sunburst_tree, 
                         valueField = "opp_amount", 
                         colors = my_colors, 
-                        rootLabel = "All Open Opps")
+                        rootLabel = "All Open Opps", 
+                        width = "100%",
+                        breadcrumbs = sund2bBreadcrumb(enabled = FALSE))
 sunburst_opps
 ```
 
