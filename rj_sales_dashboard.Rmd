@@ -4,11 +4,9 @@ output:
   flexdashboard::flex_dashboard:
     css: style.css
     orientation: rows
-
 ---
-
-```{r}
-# Libraries -------------------------------------------------------------------
+      
+```{r libraries}
 library(flexdashboard)
 library(tidyverse)
 library(DBI)
@@ -21,29 +19,57 @@ library(lubridate)
 library(scales)
 library(sunburstR)
 library(d3r)
+```
 
 
-# Connect to RStudio Warehouse ----------------------------------------------------
+```{r ownerID}
+# Add ownder ID here
+ownerID <- "0050L000009iXh7QAE"
+warehouse_UID <- "rjohnson"
+
+## Set today date
+today <- Sys.Date()
+```
+
+```{r warehouse connect}
+# Connect to RStudio Warehouse
 con <- DBI::dbConnect(odbc::odbc(), database = "marketing", 
                       Driver = "Redshift",
                       host = "redhouse.cyii7eabibhu.us-east-1.redshift.amazonaws.com", 
-                      port = "5439", UID = "rjohnson", PWD = Sys.getenv("WAREHOUSE_PASSWORD"))
+                      port = "5439", 
+                      UID = warehouse_UID, 
+                      PWD = Sys.getenv("WAREHOUSE_PASSWORD"))
+```
 
 
-# Gather Accounts, Opps, and Partner info -----------------------------------------
+```{r data pull}
+# Gather Accounts, Opps, and Partner info
 opps <- tbl(con, in_schema("salesforce", "opportunity")) %>% collect()
 acct <- tbl(con, in_schema("salesforce", "account")) %>% collect()
 partners <- tbl(con, in_schema("salesforce", "account_partner")) %>% collect()
+tasks <- tbl(con, in_schema("salesforce", "task"))
+```
 
-## My personal ownerId
-rj_ownerId <- "0050L000009iXh7QAE"
 
-
-# Data Processing for Dashboard -------------------------------------------------------
-## Filter for my opps
-rj_opps <- opps %>% 
+```{r filter accts}
+# Filter for my accounts
+my_acct <- acct %>% 
   filter(is_deleted == 0) %>% 
-  filter(owner_id == rj_ownerId) %>% 
+  filter(owner_id == ownerID) %>% 
+  select(id, name, type, billing_street, billing_city, billing_state, billing_country,
+         shipping_city, shipping_state, shipping_country, industry, last_activity_date) %>% 
+  rename(account_id = id,
+         account_name = name,
+         account_type = type,
+         account_last_activity = last_activity_date)
+```
+
+
+```{r filter opps}
+# Filter for my opps
+my_opps <- opps %>% 
+  filter(is_deleted == 0) %>% 
+  filter(owner_id == ownerID) %>% 
   filter(type == "Renewal") %>% 
   select(id, account_id, name, amount, stage_name, probability, created_date, close_date, 
          type, forecast_category, forecast_category_name, lead_source, description, 
@@ -59,42 +85,18 @@ rj_opps <- opps %>%
          opp_fiscal_year = fiscal_year,
          opp_fiscal_quarter = fiscal_quarter)
 
-## Filter for my accounts
-rj_acct <- acct %>% 
-  filter(is_deleted == 0) %>% 
-  filter(owner_id == rj_ownerId) %>% 
-  select(id, name, type, billing_street, billing_city, billing_state, billing_country,
-         shipping_city, shipping_state, shipping_country, industry, last_activity_date) %>% 
-  rename(account_id = id,
-         account_name = name,
-         account_type = type,
-         account_last_activity = last_activity_date)
-
-## Add partners to accounts (maybe add later)
-# partner_id_name <- partners %>%
-#   filter(role == "Reseller") %>% 
-#   rename(account_id = account_from_id,
-#          partner_id = account_to_id)  %>% 
-#   left_join(acct, by = c("partner_id" = "id")) %>% 
-#   select(account_id, partner_id, name) %>% 
-#   rename(partner_name = name) %>% 
-#   unique()
-
-  
-## Add account names to opps
-rj_opps_acct <- rj_opps %>% 
-  left_join(rj_acct, by = "account_id") %>% 
+# Add account names to opps
+my_opps_acct <- my_opps %>% 
+  left_join(my_acct, by = "account_id") %>% 
   select(opp_id, account_id, account_name, opp_name, opp_amount, opp_stage,
          probability, opp_created_date, opp_close_date, everything())
+```
 
-## Set today date
-today <- Sys.Date()
 
-## Extract tasks associated with me
-tasks <- tbl(con, in_schema("salesforce", "task"))
-
-rj_tasks <- tasks %>% 
-  filter(owner_id == rj_ownerId,
+```{r filter tasks}
+# Filter for my tasks
+my_tasks <- tasks %>% 
+  filter(owner_id == ownerID,
          status != "Completed") %>% 
   select(id, account_id, what_id, subject, description, activity_date, type) %>% 
   rename(task_id = id,
@@ -103,36 +105,37 @@ rj_tasks <- tasks %>%
          task_date = activity_date,
          task_type = type) %>% 
   collect()
+```
 
-## Create Account and Opp Id dictionary
-acct_id_dictionary <- rj_acct %>% 
+
+```{r id dictionary}
+# Create Account and Opp Id dictionary
+acct_id_dictionary <- my_acct %>% 
   select(account_id, account_name) %>% 
   unique()
 
-opp_id_dictionary <- rj_opps %>% 
+opp_id_dictionary <- my_opps %>% 
   select(opp_id, opp_name) %>% 
   unique()
 
-acct_opp_dictionary <- tibble(id = c(rj_acct$account_id, rj_opps$opp_id),
-                              name = c(rj_acct$account_name, rj_opps$opp_name))
+acct_opp_dictionary <- tibble(id = c(my_acct$account_id, my_opps$opp_id),
+                              name = c(my_acct$account_name, my_opps$opp_name))
+```
 
 
 
-
-
-
-
-
-# Plots / Tables for Dashboard ---------------------------------------------------
+```{r opp table}
+# Create pre-url hyperlinks
 acct_url_pre <- '<a href="https://na39.lightning.force.com/lightning/r/Account/'
 opp_url_pre  <- '<a href="https://na39.lightning.force.com/lightning/r/Opportunity/'
 task_url_pre <- '<a href="https://na39.lightning.force.com/lightning/r/Task/'
 
-## Opp Table
+# Opp Table days/color breaks
 days_breaks <- c(7, 14, 30, 45, 90)
 color_breaks <- rev(c('#ffffb2','#fed976','#feb24c','#fd8d3c','#f03b20','#bd0026'))
 
-rj_opps_table <- rj_opps_acct %>% 
+# Create Table
+my_opps_table <- my_opps_acct %>% 
   filter(!opp_stage %in% c("Closed Won", "Closed Lost")) %>% 
   select(opp_id, account_id, account_name, opp_name, opp_amount, opp_stage, opp_close_date,
          opp_last_activity, account_last_activity) %>% 
@@ -149,10 +152,12 @@ rj_opps_table <- rj_opps_acct %>%
          `Close Date` = opp_close_date) %>% 
   unique() %>% 
   arrange(`Days to Close`)
+```
 
 
-## Task Table
-rj_task_table <- rj_tasks %>%
+```{r task table}
+# Task Table
+my_task_table <- my_tasks %>%
   filter(!is.na(task_id)) %>% 
   select(task_id, account_id, task_date, 
          task_subject, task_description, task_type) %>%
@@ -166,21 +171,23 @@ rj_task_table <- rj_tasks %>%
                                                units = "days"))) %>% 
   select(Account, Task, `Days until Due`) %>% 
   arrange(`Days until Due`)
+```
 
 
-## Sales Prediction Plot
+```{r sales money plot}
+# Sales Prediction Plot
 fiscal_year <- 2020
 fiscal_quarter <- 2
 
-rj_sales_data <- rj_opps_acct %>% 
+my_sales_data <- my_opps_acct %>% 
   select(opp_id, opp_stage, opp_close_date, opp_amount, opp_fiscal_year, opp_fiscal_quarter) %>% 
   mutate(opp_stage = ifelse(opp_stage %in% c("Evaluation", "Quoted"), "Open", opp_stage)) %>% 
   filter(opp_fiscal_year == fiscal_year & opp_fiscal_quarter == fiscal_quarter)
 
-min_date <- min(rj_sales_data$opp_close_date)
+min_date <- min(my_sales_data$opp_close_date)
   
 
-rj_sales_data2 <- rj_sales_data %>% 
+my_sales_data2 <- my_sales_data %>% 
   # Add columns to initialize each stage as $0
   add_row(opp_id = LETTERS[1:3],
           opp_stage = c("Closed Lost", "Closed Won", "Open"),
@@ -200,12 +207,11 @@ rj_sales_data2 <- rj_sales_data %>%
   mutate(`All Opps` = `Won Total` + `Lost Total` + `Open Total`) %>% 
   mutate(Churn = ifelse(opp_close_date > Sys.Date(), NA, `Won Total` + `Lost Total`)) %>% 
   mutate(Winnings = ifelse(opp_close_date > Sys.Date(), NA, `Won Total`))
+```
 
 
-
-
-## Sunburst Plot
-rj_sunburst_table <- rj_opps_acct %>% 
+```{r sunburst plot}
+my_sunburst_table <- my_opps_acct %>% 
   filter(!opp_stage %in% c("Closed Won", "Closed Lost")) %>% 
   select(opp_id, account_id, account_name, opp_name, opp_amount, opp_stage, opp_close_date,
          opp_last_activity, account_last_activity) %>% 
@@ -220,7 +226,7 @@ rj_sunburst_table <- rj_opps_acct %>%
   select(account_name, opp_name_days, opp_amount, opp_stage, days_to_close)
 
 # Get list of ALL calls, past and present
-# Does not include in person meetings
+## Does not include in person meetings
 all_calls <- tasks %>% 
   filter(task_subtype == "Call", type == "Call") %>% 
   filter(is_deleted == "0") %>% # This line is weird and could cause problems
@@ -231,7 +237,7 @@ all_calls <- tasks %>%
   collect()
 
 # merge calls into accounts
-calls_account <- rj_acct %>% 
+calls_account <- my_acct %>% 
   left_join(all_calls, by = "account_id") %>% 
   select(account_name, activity_date) %>% 
   # Calculate days from last call
@@ -245,7 +251,7 @@ calls_account <- rj_acct %>%
   mutate(account_name_days = paste0(account_name, " -- Days since last call: ", days_last_call))
 
 # Add to sunburst table and change account name
-rj_sunburst_table_call <- rj_sunburst_table %>% 
+my_sunburst_table_call <- my_sunburst_table %>% 
   left_join(calls_account, by = "account_name") %>% 
   select(account_name_days, everything()) %>% 
   select(-account_name)
@@ -259,7 +265,7 @@ calls_account_color <- calls_account %>%
   mutate(acct_color = ifelse(is.na(acct_color), "#ca0020", acct_color))
 
 # Color opps by days to close
-opps_color <- rj_sunburst_table_call %>% 
+opps_color <- my_sunburst_table_call %>% 
   select(opp_name_days, days_to_close) %>% 
   mutate(opp_color = ifelse(days_to_close <= 0, "#b10026",
                      ifelse(days_to_close > 0 & days_to_close <= 7, "#e31a1c",
@@ -268,7 +274,6 @@ opps_color <- rj_sunburst_table_call %>%
                      ifelse(days_to_close > 21 & days_to_close <= 45, "#feb24c",
                      ifelse(days_to_close > 45 & days_to_close <= 90, "#fed976", 
                      "#a1d99b")))))))
-
 ```
 
 
@@ -280,7 +285,7 @@ Row
 
 ### Accounts {.value-box}
 ```{r}
-valueBox(value = nrow(rj_acct), 
+valueBox(value = nrow(my_acct), 
          caption = "Total Accounts", 
          icon = "fa-building", 
          color = "#7f8de1")
@@ -289,7 +294,7 @@ valueBox(value = nrow(rj_acct),
 
 ### Opps {.value-box}
 ```{r}
-valueBox(value = nrow(rj_opps_table), 
+valueBox(value = nrow(my_opps_table), 
          caption = "Total Opps", 
          icon = "fa-crown", 
          color = "#f9b95b")
@@ -297,7 +302,7 @@ valueBox(value = nrow(rj_opps_table),
 
 ### Tasks {.value-box}
 ```{r}
-valueBox(value = nrow(rj_task_table), 
+valueBox(value = nrow(my_task_table), 
          caption = "Tasks Due", 
          icon = "fa-tasks", 
          color = "#4bc076")
@@ -309,7 +314,7 @@ Row
 ### Sales Data
 
 ```{r}
-sales_plot <- rj_sales_data2 %>%
+sales_plot <- my_sales_data2 %>%
   ggplot(aes(x = opp_close_date)) +
   # Totals
   geom_line(aes(y = `All Opps`)) +
@@ -330,7 +335,7 @@ ggplotly(sales_plot)
 ### Company Opp Amounts
 
 ```{r}
-sunburst_tree <- rj_sunburst_table_call %>% 
+sunburst_tree <- my_sunburst_table_call %>% 
   select(account_name_days, opp_name_days, opp_amount) %>% 
   d3_nest(value_cols = "opp_amount")
 
@@ -371,7 +376,7 @@ Opportunities
 ### Opportunities
 
 ```{r}
-DT::datatable(rj_opps_table, escape = FALSE) %>% 
+DT::datatable(my_opps_table, escape = FALSE) %>% 
   formatStyle(columns = "Days to Close",
               backgroundColor = styleInterval(days_breaks, color_breaks)) %>% 
   formatCurrency(columns = "Opp Amount", currency = "$")
@@ -384,7 +389,7 @@ Tasks
 ### Tasks
 
 ```{r}
-DT::datatable(rj_task_table, escape = FALSE) %>% 
+DT::datatable(my_task_table, escape = FALSE) %>% 
   formatStyle(columns = "Days until Due",
               backgroundColor = styleInterval(days_breaks, color_breaks))
 ```
