@@ -25,20 +25,13 @@ library(d3r)
 ```{r ownerID}
 # Add ownder ID here
 ownerID <- "0050L000009iXh7QAE"
-warehouse_UID <- "rjohnson"
 
 ## Set today date
 today <- Sys.Date()
 ```
 
-```{r warehouse connect}
-# Connect to RStudio Warehouse
-con <- DBI::dbConnect(odbc::odbc(), database = "marketing", 
-                      Driver = "Redshift",
-                      host = "redhouse.cyii7eabibhu.us-east-1.redshift.amazonaws.com", 
-                      port = "5439", 
-                      UID = warehouse_UID, 
-                      PWD = Sys.getenv("WAREHOUSE_PASSWORD"))
+```{r}
+source("R/warehouse_connect.R")
 ```
 
 
