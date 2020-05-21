@@ -28,92 +28,20 @@ ownerID <- "0050L000009iXh7QAE"
 
 ## Set today date
 today <- Sys.Date()
-```
 
-```{r}
+# ---------------------------------------------------------------
+# Connect to database and gather Accounts, Opps, and Partner Info
 source("R/warehouse_connect.R")
+
+# Filter accounts, opps, and tasks
+source("R/filter_sf_data.R")
+
+# Create Acct-Opp ID Dictionary
+source("R/Acct_opp_dictionary.R")
 ```
 
 
-```{r data pull}
-# Gather Accounts, Opps, and Partner info
-opps <- tbl(con, in_schema("salesforce", "opportunity")) %>% collect()
-acct <- tbl(con, in_schema("salesforce", "account")) %>% collect()
-partners <- tbl(con, in_schema("salesforce", "account_partner")) %>% collect()
-tasks <- tbl(con, in_schema("salesforce", "task"))
-```
 
-
-```{r filter accts}
-# Filter for my accounts
-my_acct <- acct %>% 
-  filter(is_deleted == 0) %>% 
-  filter(owner_id == ownerID) %>% 
-  select(id, name, type, billing_street, billing_city, billing_state, billing_country,
-         shipping_city, shipping_state, shipping_country, industry, last_activity_date) %>% 
-  rename(account_id = id,
-         account_name = name,
-         account_type = type,
-         account_last_activity = last_activity_date)
-```
-
-
-```{r filter opps}
-# Filter for my opps
-my_opps <- opps %>% 
-  filter(is_deleted == 0) %>% 
-  filter(owner_id == ownerID) %>% 
-  filter(type == "Renewal") %>% 
-  select(id, account_id, name, amount, stage_name, probability, created_date, close_date, 
-         type, forecast_category, forecast_category_name, lead_source, description, 
-         last_activity_date, fiscal_quarter, fiscal_year, fiscal) %>% 
-  rename(opp_id = id,
-         opp_name = name,
-         opp_amount = amount,
-         opp_stage = stage_name,
-         opp_created_date = created_date,
-         opp_close_date = close_date,
-         opp_description = description,
-         opp_last_activity = last_activity_date,
-         opp_fiscal_year = fiscal_year,
-         opp_fiscal_quarter = fiscal_quarter)
-
-# Add account names to opps
-my_opps_acct <- my_opps %>% 
-  left_join(my_acct, by = "account_id") %>% 
-  select(opp_id, account_id, account_name, opp_name, opp_amount, opp_stage,
-         probability, opp_created_date, opp_close_date, everything())
-```
-
-
-```{r filter tasks}
-# Filter for my tasks
-my_tasks <- tasks %>% 
-  filter(owner_id == ownerID,
-         status != "Completed") %>% 
-  select(id, account_id, what_id, subject, description, activity_date, type) %>% 
-  rename(task_id = id,
-         task_subject = subject,
-         task_description = description,
-         task_date = activity_date,
-         task_type = type) %>% 
-  collect()
-```
-
-
-```{r id dictionary}
-# Create Account and Opp Id dictionary
-acct_id_dictionary <- my_acct %>% 
-  select(account_id, account_name) %>% 
-  unique()
-
-opp_id_dictionary <- my_opps %>% 
-  select(opp_id, opp_name) %>% 
-  unique()
-
-acct_opp_dictionary <- tibble(id = c(my_acct$account_id, my_opps$opp_id),
-                              name = c(my_acct$account_name, my_opps$opp_name))
-```
 
 
 
