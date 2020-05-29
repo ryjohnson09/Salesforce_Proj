@@ -22,7 +22,7 @@ library(d3r)
 ```
 
 
-```{r ownerID}
+```{r Data Process}
 # Add ownder ID here
 ownerID <- "0050L000009iXh7QAE"
 
@@ -46,6 +46,8 @@ source("R/Acct_opp_dictionary.R")
 
 
 ```{r opp table}
+# Opp table
+
 # Create pre-url hyperlinks
 acct_url_pre <- '<a href="https://na39.lightning.force.com/lightning/r/Account/'
 opp_url_pre  <- '<a href="https://na39.lightning.force.com/lightning/r/Opportunity/'
@@ -282,7 +284,12 @@ Opportunities
 DT::datatable(my_opps_table, escape = FALSE) %>% 
   formatStyle(columns = "Days to Close",
               backgroundColor = styleInterval(days_breaks, color_breaks)) %>% 
-  formatCurrency(columns = "Opp Amount", currency = "$")
+  formatCurrency(columns = "Opp Amount", currency = "$") %>% 
+  formatStyle(columns = "Opp Amount", 
+              background = styleColorBar(my_opps_table$`Opp Amount`, 'lightblue'),
+              backgroundSize = '100% 90%',
+              backgroundRepeat = 'no-repeat',
+              backgroundPosition = 'center')
 ```
 
 
