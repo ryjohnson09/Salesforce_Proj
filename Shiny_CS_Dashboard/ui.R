@@ -32,6 +32,7 @@ ui <- dashboardPage(
     dashboardBody(
         fluidRow(
             box(plotlyOutput("cs_opp_plot"), width = "100%"),
+            box(DTOutput("cs_date_table"), width = "100%")
         )
     )
 )
