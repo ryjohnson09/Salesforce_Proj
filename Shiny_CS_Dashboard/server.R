@@ -3,7 +3,13 @@
 server <- function(input, output) {
   
   # Warehouse Connection --------------------------------------------------------
-  con <- src_wh()
+  con <- DBI::dbConnect(odbc::odbc(), 
+                        database = "marketing", 
+                        Driver = "Redshift",
+                        host = "redhouse.cyii7eabibhu.us-east-1.redshift.amazonaws.com", 
+                        port = 5439, 
+                        UID = Sys.getenv("WAREHOUSE_USER"), 
+                        PWD = Sys.getenv("WAREHOUSE_PASSWORD"))
   
   
   # Pull CS Rep Data -------------------------------------------------------------
@@ -27,7 +33,7 @@ server <- function(input, output) {
   
   
   
-  # CS Opp Plot --------------------------------------------
+  # CS Opp Plot ------------------------------------------------------
   output$cs_opp_plot <- renderPlotly({
     cs_opp_plot <- cs_table() %>%
       filter(opp_is_deleted == 0) %>%
@@ -55,8 +61,9 @@ server <- function(input, output) {
     ggplotly(cs_opp_plot)
   })
   
-  # CS Opp Table ---------------------------------------------------------
   
+  
+  # CS Opp Table ---------------------------------------------------------
   # Create pre-url hyperlinks
   acct_url_pre <- '<a href="https://na39.lightning.force.com/lightning/r/Account/'
   opp_url_pre  <- '<a href="https://na39.lightning.force.com/lightning/r/Opportunity/'
@@ -85,6 +92,8 @@ server <- function(input, output) {
              `Close Date` = opp_close_date) %>% 
       unique() %>% 
       arrange(`Days to Close`) %>%
+      
+      # Format Opp DT Table
       DT::datatable(escape = FALSE) %>% 
       formatStyle(columns = "Days to Close",
                   backgroundColor = styleInterval(days_breaks, color_breaks)) %>% 
@@ -94,6 +103,8 @@ server <- function(input, output) {
                   backgroundRepeat = 'no-repeat',
                   backgroundPosition = 'center')
   })
+  
+
   
 }
 

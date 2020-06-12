@@ -2,7 +2,7 @@
 library(shiny)
 library(shinydashboard)
 library(tidyverse)
-library(warehouse)
+library(odbc)
 library(dbplyr)
 library(DT)
 library(DBI)
