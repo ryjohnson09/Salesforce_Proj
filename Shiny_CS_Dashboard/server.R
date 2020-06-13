@@ -158,21 +158,6 @@ server <- function(input, output) {
     # get tasks
     tasks <- tbl(con, in_schema("salesforce", "task"))
     
-    my_sunburst_table <- cs_table() %>%
-      filter(opp_is_deleted == 0) %>%
-      filter(!opp_stage_name %in% c("Closed Won", "Closed Lost")) %>% 
-      select(opp_id, opp_account_id, acct_name, opp_name, opp_amount, opp_stage_name, opp_close_date,
-             opp_last_activity_date, acct_last_activity_date) %>% 
-      # Calculate days to close
-      mutate(days_to_close = as.double(difftime(ymd(opp_close_date),
-                                                ymd(today()),
-                                                units = "days"))) %>% 
-      select(acct_name, opp_name, opp_stage_name, opp_amount, opp_close_date, days_to_close) %>% 
-      unique() %>% 
-      arrange(days_to_close) %>% 
-      mutate(opp_name_days = paste0(opp_name, " -- Days to close: ", days_to_close)) %>% 
-      select(acct_name, opp_name_days, opp_amount, opp_stage_name, days_to_close)
-    
     # Extract all calls from accounts
     all_calls <- tasks %>% 
       filter(task_subtype == "Call", type == "Call") %>% 
@@ -183,8 +168,24 @@ server <- function(input, output) {
              who_id, owner_id) %>%
       collect()
     
+    my_sunburst_table <- cs_table() %>%
+      filter(opp_is_deleted == 0) %>%
+      filter(opp_stage_name %in% c("Order Submitted", "Evaluation", "Quoted")) %>%
+      filter(!is.na(opp_amount))%>%
+      select(opp_id, opp_account_id, acct_name, opp_name, opp_amount, opp_stage_name, opp_close_date,
+             opp_last_activity_date, acct_last_activity_date) %>% 
+      # Calculate days to close
+      mutate(days_to_close = as.double(difftime(ymd(opp_close_date),
+                                                ymd(today()),
+                                                units = "days"))) %>% 
+      select(acct_name, opp_name, opp_stage_name, opp_amount, opp_close_date, days_to_close) %>% 
+      unique() %>% 
+      mutate(opp_name_days = paste0(opp_name, " -- Days to close: ", days_to_close)) %>% 
+      select(acct_name, opp_name_days, opp_amount, opp_stage_name, days_to_close) %>%
+      arrange(days_to_close)
+    
     # merge calls into accounts
-    calls_account <- acct_opps %>% 
+    calls_account <- cs_table() %>% 
       left_join(all_calls, by = c("opp_account_id" = "account_id")) %>% 
       select(acct_name, activity_date) %>% 
       # Calculate days from last call
@@ -201,7 +202,8 @@ server <- function(input, output) {
     my_sunburst_table_call <- my_sunburst_table %>% 
       left_join(calls_account, by = "acct_name") %>% 
       select(account_name_days, everything()) %>% 
-      select(-acct_name)
+      select(-acct_name) %>%
+      arrange(days_to_close)
     
     # Add colors conditionally
     calls_account_color <- calls_account %>% 

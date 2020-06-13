@@ -59,7 +59,7 @@ ui <- dashboardPage(
             tabItem(tabName = "acct_contact",
                     h2("Account Contact"),
                     column(12, align = "center",
-                        sund2bOutput("acct_sunburst", height = 500, width = 500)
+                        sund2bOutput("acct_sunburst", height = 600, width = 600)
                     )
             )
         )
