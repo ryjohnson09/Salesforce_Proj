@@ -72,6 +72,7 @@ server <- function(input, output) {
   days_breaks <- c(7, 14, 30, 45, 90)
   color_breaks <- rev(c('#ffffb2','#fed976','#feb24c','#fd8d3c','#f03b20','#bd0026'))
   
+  # Render DT Opp Table
   output$cs_date_table <- renderDT({
     cs_table() %>% 
       filter(opp_is_deleted == 0) %>% 
@@ -82,6 +83,7 @@ server <- function(input, output) {
       # Make account and opps urls
       mutate(Account = paste0(acct_url_pre, opp_account_id, '/view">', acct_name, '</a>')) %>% 
       mutate(Opportunity = paste0(opp_url_pre, opp_id, '/view">', opp_name, '</a>')) %>% 
+      
       # Calculate days to close
       mutate(`Days to Close` = as.double(difftime(ymd(opp_close_date),
                                                   ymd(today()),
@@ -103,8 +105,5 @@ server <- function(input, output) {
                   backgroundRepeat = 'no-repeat',
                   backgroundPosition = 'center')
   })
-  
-
-  
 }
 
