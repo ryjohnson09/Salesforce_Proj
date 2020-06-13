@@ -31,10 +31,57 @@ server <- function(input, output) {
       acct_opps
   })
   
+  # Value Boxes ---------------------------------------------------------------------
+  # Closed Won Total
+  output$vbox_won <- renderValueBox({
+    
+    closed_won_total <- cs_table() %>% 
+      filter(opp_is_deleted == 0) %>%
+      filter(year(opp_close_date) == year(today())) %>% 
+      filter(opp_stage_name == "Closed Won") %>% 
+      summarise(won = sum(opp_amount, na.rm = TRUE)) %>% 
+      pull()
+    
+    valueBox(scales::dollar(closed_won_total), 
+             "Closed Won", 
+             icon=icon("trophy"), 
+             color='green')
+  })
   
+  # Pipeline Total
+  output$vbox_pipeline <- renderValueBox({
+    
+    pipeline <- cs_table() %>% 
+      filter(opp_is_deleted == 0) %>%
+      filter(year(opp_close_date) == year(today())) %>% 
+      filter(opp_stage_name %in% c('Qualifying', 'Quoted', 'Evaluation')) %>% 
+      summarise(pipe = sum(opp_amount, na.rm = TRUE)) %>% 
+      pull()
+    
+    valueBox(scales::dollar(pipeline), 
+             "Pipeline", 
+             icon=icon("money"),
+             color='yellow')
+  })
   
-  # CS Opp Plot ------------------------------------------------------
+  # Opps Open This Month
+  output$vbox_month_open <- renderValueBox({
+    
+    opp_open_month <- cs_table() %>% 
+      filter(opp_is_deleted == 0) %>% 
+      filter(month(opp_close_date) == month(today())) %>% 
+      filter(!opp_stage_name %in% c("Closed Won", "Closed Lost")) %>% 
+      tally()
+       
+    valueBox(opp_open_month, 
+             'Opps Open This Month', 
+             icon = icon("box-open"),
+             color='red')
+  })
+  
+  # CS Opp Plot -----------------------------------------------------------------------
   output$cs_opp_plot <- renderPlotly({
+    suppressWarnings(
     cs_opp_plot <- cs_table() %>%
       filter(opp_is_deleted == 0) %>%
       filter(year(opp_close_date) == year(today())) %>%
@@ -56,14 +103,14 @@ server <- function(input, output) {
       scale_x_date(labels = date_format("%b-%Y")) +
       theme_classic() + 
       labs(x = 'Close Date', y = "Opp Value") + 
-      theme(legend.position = "none")
+      theme(legend.position = "none"))
     
-    ggplotly(cs_opp_plot)
+      ggplotly(cs_opp_plot)
   })
   
   
   
-  # CS Opp Table ---------------------------------------------------------
+  # CS Opp Table --------------------------------------------------------------------------
   # Create pre-url hyperlinks
   acct_url_pre <- '<a href="https://na39.lightning.force.com/lightning/r/Account/'
   opp_url_pre  <- '<a href="https://na39.lightning.force.com/lightning/r/Opportunity/'
