@@ -9,6 +9,8 @@ library(DBI)
 library(lubridate)
 library(plotly)
 library(scales)
+library(sunburstR)
+library(d3r)
 
 ui <- dashboardPage(
     
@@ -31,7 +33,7 @@ ui <- dashboardPage(
         # Declare sidebar tabs
         sidebarMenu(
             menuItem("Opp Overview", tabName = "opp_overview", icon = icon("crown")),
-            menuItem("Account Contact", tabName = "acct_contact", icon = icon("building"))
+            menuItem("Account Contact", tabName = "acct_contact", icon = icon("dot-circle"))
             )),
 
     # Dashboard Body
@@ -55,7 +57,11 @@ ui <- dashboardPage(
             
             # Account contact
             tabItem(tabName = "acct_contact",
-                    h2("Sunburst plot and others"))
+                    h2("Account Contact"),
+                    column(12, align = "center",
+                        sund2bOutput("acct_sunburst", height = 500, width = 500)
+                    )
+            )
         )
     )
     

@@ -152,5 +152,90 @@ server <- function(input, output) {
                   backgroundRepeat = 'no-repeat',
                   backgroundPosition = 'center')
   })
+  
+  # Acct Contact Sunburst Plot ----------------------------------------------------------------
+  output$acct_sunburst <- renderSund2b({
+    # get tasks
+    tasks <- tbl(con, in_schema("salesforce", "task"))
+    
+    my_sunburst_table <- cs_table() %>%
+      filter(opp_is_deleted == 0) %>%
+      filter(!opp_stage_name %in% c("Closed Won", "Closed Lost")) %>% 
+      select(opp_id, opp_account_id, acct_name, opp_name, opp_amount, opp_stage_name, opp_close_date,
+             opp_last_activity_date, acct_last_activity_date) %>% 
+      # Calculate days to close
+      mutate(days_to_close = as.double(difftime(ymd(opp_close_date),
+                                                ymd(today()),
+                                                units = "days"))) %>% 
+      select(acct_name, opp_name, opp_stage_name, opp_amount, opp_close_date, days_to_close) %>% 
+      unique() %>% 
+      arrange(days_to_close) %>% 
+      mutate(opp_name_days = paste0(opp_name, " -- Days to close: ", days_to_close)) %>% 
+      select(acct_name, opp_name_days, opp_amount, opp_stage_name, days_to_close)
+    
+    # Extract all calls from accounts
+    all_calls <- tasks %>% 
+      filter(task_subtype == "Call", type == "Call") %>% 
+      filter(is_deleted == "0") %>% # This line is weird and could cause problems
+      filter(status == "Completed") %>%
+      select(id, account_id, what_id, activity_date,
+             subject, description, status,
+             who_id, owner_id) %>%
+      collect()
+    
+    # merge calls into accounts
+    calls_account <- acct_opps %>% 
+      left_join(all_calls, by = c("opp_account_id" = "account_id")) %>% 
+      select(acct_name, activity_date) %>% 
+      # Calculate days from last call
+      mutate(days_last_call = as.double(difftime(ymd(today()),
+                                                 ymd(activity_date),
+                                                 units = "days"))) %>% 
+      group_by(acct_name) %>% 
+      filter(days_last_call == min(days_last_call) | is.na(days_last_call)) %>% 
+      unique() %>% 
+      ungroup() %>% 
+      mutate(account_name_days = paste0(acct_name, " -- Days since last call: ", days_last_call))
+    
+    # Add to sunburst table and change account name
+    my_sunburst_table_call <- my_sunburst_table %>% 
+      left_join(calls_account, by = "acct_name") %>% 
+      select(account_name_days, everything()) %>% 
+      select(-acct_name)
+    
+    # Add colors conditionally
+    calls_account_color <- calls_account %>% 
+      mutate(acct_color = ifelse(days_last_call <= 90, "#0571b0",
+                          ifelse(days_last_call > 90 & days_last_call <= 180, "#92c5de",
+                          ifelse(days_last_call > 180 & days_last_call <= 270, "#f4a582", "#ca0020")))) %>% 
+      mutate(acct_color = ifelse(is.na(acct_color), "#ca0020", acct_color))
+    
+    # Color opps by days to close
+    opps_color <- my_sunburst_table_call %>% 
+      select(opp_name_days, days_to_close) %>% 
+      mutate(opp_color = ifelse(days_to_close <= 0, "#b10026",
+                         ifelse(days_to_close > 0 & days_to_close <= 7, "#e31a1c",
+                         ifelse(days_to_close > 7 & days_to_close <= 14, "#fc4e2a",
+                         ifelse(days_to_close > 14 & days_to_close <= 21, "#fd8d3c",        
+                         ifelse(days_to_close > 21 & days_to_close <= 45, "#feb24c",
+                         ifelse(days_to_close > 45 & days_to_close <= 90, "#fed976", "#a1d99b")))))))
+    
+    # Generate sunburs plot
+    sunburst_tree <- my_sunburst_table_call %>% 
+      select(account_name_days, opp_name_days, opp_amount) %>% 
+      d3_nest(value_cols = "opp_amount")
+    
+    my_colors <- list(range = c(calls_account_color$acct_color, opps_color$opp_color),
+                      domain = c(calls_account_color$account_name_days, opps_color$opp_name_days))
+    
+    sunburst_opps <- sund2b(sunburst_tree, 
+                            valueField = "opp_amount", 
+                            colors = my_colors, 
+                            rootLabel = "All Open Opps", 
+                            width = "100%",
+                            breadcrumbs = sund2bBreadcrumb(enabled = FALSE))
+    sunburst_opps
+  })
+  
 }
 
