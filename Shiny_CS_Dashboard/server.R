@@ -125,7 +125,7 @@ server <- function(input, output) {
       filter(opp_is_deleted == 0) %>% 
       select(opp_id, opp_account_id, acct_name, opp_name, opp_amount, 
              opp_type, opp_stage_name, opp_close_date) %>% 
-      filter(!opp_stage_name %in% c("Closed Won", "Closed Lost", "Unqualified")) %>%
+      filter(!opp_stage_name %in% c("Closed Won", "Closed Lost", "Unqualified", "Opportunity Disqualified")) %>%
       
       # Make account and opps urls
       mutate(Account = paste0(acct_url_pre, opp_account_id, '/view">', acct_name, '</a>')) %>% 
